@@ -1,0 +1,197 @@
+name: Diffacto summary
+description: >-
+  Comments on a pull request with what it changes in the files a text diff
+  fails on: lockfiles, database and API schemas, images, binaries and video.
+  The full report, with image thumbnails, is uploaded as a build artifact and
+  linked from the comment. Only short change labels leave the runner, never
+  file content. Posting uses the job's GITHUB_TOKEN, so the job needs
+  `permissions: pull-requests: write` (and `contents: read`); a pull request
+  from a fork gets a read-only token, so there the comment is skipped and the
+  summary is on the job's summary page. Run it on `pull_request`. Give it
+  visual-baseline and visual-current, two folders of screenshots, and it also
+  checks the screenshots against the baseline and comments about them
+  separately.
+inputs:
+  version:
+    description: >-
+      The diffacto release to install, which release-url turns into an address.
+      Left empty with the default release-url, the newest release is
+      installed.
+    required: false
+    default: ''
+  release-url:
+    description: >-
+      Where releases are downloaded from: an address with {version}, {os}
+      (linux, macos, windows) and {arch} (x64, arm64) in it, for a diffacto
+      binary or a .tar.gz holding one. By default, Diffacto's own downloads,
+      checked against their SHA256SUMS: for Linux on x64 and arm64, built
+      for Ubuntu 24.04 (the FFmpeg libraries it needs are installed if they
+      are missing), and for macOS on Apple silicon. There is none for Windows
+      yet; there, give binary-url or build-from-source. A download from
+      another address is not checked.
+    required: false
+    default: https://downloads.diffacto.com/diffacto-{version}-{os}-{arch}.tar.gz
+  binary-url:
+    description: >-
+      The address of a diffacto binary or a .tar.gz holding one, used instead
+      of version. It may contain {os} and {arch}.
+    required: false
+    default: ''
+  build-from-source:
+    description: >-
+      Build the diffacto source this action was fetched with (needs a Rust
+      toolchain on the runner) instead of downloading a binary.
+    required: false
+    default: 'false'
+  base:
+    description: >-
+      The commit or branch on origin the pull request merges into. By default,
+      the pull request's base commit.
+    required: false
+    default: ''
+  fetch-depth:
+    description: >-
+      Commits of history to fetch if the checkout is too shallow to see where
+      the pull request branched. Check out with fetch-depth: 0 to have it all.
+    required: false
+    default: '100'
+  post:
+    description: Post (or update) the comment on the pull request.
+    required: false
+    default: 'true'
+  fail-on:
+    description: >-
+      Rules that fail the job, after the comment is posted, when the pull
+      request changes what they name. Comma-separated, each KIND or KIND:WHAT,
+      with no spaces: for example schema:delete,lockfile:insert,binary:grew>10%.
+      KIND is lockfile, schema, table, document, image, video, audio, timeline,
+      scene, midi, design, binary, other or any. WHAT is added, deleted,
+      renamed, modified, insert, delete, modify, move, rename, reformat or
+      grew>N%; without it, any change its comparison shows counts (a picture
+      within its allowance shows none). The comment lists
+      the files that were blocked first.
+    required: false
+    default: ''
+  visual-baseline:
+    description: >-
+      A folder of approved screenshots in the checkout. With visual-current,
+      the screenshots are compared with it too: the result is on the job's
+      summary page, the report is in the artifact, and a comment of its own
+      goes on the pull request. Approve changes with `diffacto visual
+      --approve` and commit the new baseline.
+    required: false
+    default: ''
+  visual-current:
+    description: >-
+      The folder of screenshots this run took, to check against
+      visual-baseline.
+    required: false
+    default: ''
+  language:
+    description: >-
+      The language the comments, the job summary and the report are written
+      in: en, de, ja or zh-Hans. summary.json stays English.
+    required: false
+    default: en
+  report-artifact:
+    description: The name of the artifact that holds the report and summary.json.
+    required: false
+    default: diffacto-report
+  github-token:
+    description: >-
+      The token that posts the comment. It needs pull-requests: write.
+    required: false
+    default: ${{ github.token }}
+outputs:
+  summary:
+    description: The path of the summary.json this run wrote.
+    value: ${{ steps.summarize.outputs.dir }}/summary.json
+  report-url:
+    description: Where the uploaded report can be opened.
+    value: ${{ steps.upload.outputs.artifact-url }}
+  visual-changed:
+    description: >-
+      Whether any screenshot is changed, added, removed or could not be
+      compared: true or false, empty when the screenshots were not checked.
+    value: ${{ steps.visual.outputs.changed }}
+runs:
+  using: composite
+  steps:
+    - id: base
+      name: Find the base commit
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        DEPTH: ${{ inputs.fetch-depth }}
+      run: bash "${{ github.action_path }}/scripts/fetch-base.sh"
+    - name: Install diffacto
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        RELEASE_URL: ${{ inputs.release-url }}
+        BINARY_URL: ${{ inputs.binary-url }}
+        BUILD_FROM_SOURCE: ${{ inputs.build-from-source }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "${{ github.action_path }}/scripts/install.sh"
+    - id: summarize
+      name: Summarize the pull request
+      shell: bash
+      env:
+        BASE: ${{ steps.base.outputs.base }}
+        OUT: ${{ runner.temp }}/diffacto-report
+        COMMENT_LANG: ${{ inputs.language }}
+      run: bash "${{ github.action_path }}/scripts/summarize.sh"
+    - id: visual
+      name: Check the screenshots
+      if: inputs.visual-baseline != '' && inputs.visual-current != ''
+      # Screenshot folders that are not there must not hold back the summary.
+      continue-on-error: true
+      shell: bash
+      env:
+        BASELINE: ${{ inputs.visual-baseline }}
+        CURRENT: ${{ inputs.visual-current }}
+        OUT: ${{ steps.summarize.outputs.dir }}
+        COMMENT_LANG: ${{ inputs.language }}
+      run: bash "${{ github.action_path }}/scripts/visual.sh"
+    - id: upload
+      name: Upload the report
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.report-artifact }}
+        path: ${{ steps.summarize.outputs.dir }}
+    - name: Comment on the pull request
+      if: inputs.post == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      # A comment that cannot be posted (a fork's read-only token) is no reason
+      # to fail the pull request; the step still shows as failed.
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        SUMMARY: ${{ steps.summarize.outputs.dir }}/summary.json
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        COMMENT_LANG: ${{ inputs.language }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: bash "${{ github.action_path }}/scripts/post.sh"
+    - name: Comment on the pull request about the screenshots
+      if: inputs.post == 'true' && inputs.visual-baseline != '' && inputs.visual-current != '' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      # Kept apart from the comment above, so that neither can stop the other.
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        BASELINE: ${{ inputs.visual-baseline }}
+        CURRENT: ${{ inputs.visual-current }}
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        COMMENT_LANG: ${{ inputs.language }}
+      run: bash "${{ github.action_path }}/scripts/post-visual.sh"
+    - name: Fail on what the rules block
+      if: inputs.fail-on != ''
+      # After every comment, so a blocked pull request still gets them; and a
+      # step of its own, because the comment above may not fail the job.
+      shell: bash
+      env:
+        SUMMARY: ${{ steps.summarize.outputs.dir }}/summary.json
+        COMMENT_LANG: ${{ inputs.language }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: bash "${{ github.action_path }}/scripts/policy.sh"
