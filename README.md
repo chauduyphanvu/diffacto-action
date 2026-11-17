@@ -28,7 +28,7 @@ It runs on Linux (x64 and arm64, built for Ubuntu 24.04) and on macOS with Apple
 
 ## What it looks like
 
-These pictures are real output from a sample pull request. It updates two npm packages and adds a third, removes an API endpoint, drops a database column, recolors part of a picture, blacks out a second of a video, and makes a program file bigger. The job ran with one rule set:
+These pictures are real output from a sample pull request. It updates two npm packages and adds a third, removes an API endpoint, drops a database column, recolors part of a picture, blacks out and mutes a second of a video, and makes a program file bigger. The job ran with one rule set:
 
 ```yaml
       - uses: chauduyphanvu/diffacto-action@v1
@@ -40,7 +40,7 @@ These pictures are real output from a sample pull request. It updates two npm pa
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/comment-dark.png">
-  <img src="docs/comment-light.png" width="820" alt="The pull request comment. Blocked by policy: api/openapi.yaml and db/schema.sql (schema:delete), bin/shop-agent (binary:grew>20%). Then each changed file by kind: the lockfile's version changes, the API's breaking changes, the dropped and added columns, the picture's changed region, the video's replaced shot, the program file's growth.">
+  <img src="docs/comment-light.png" width="820" alt="The pull request comment. Blocked by policy: api/openapi.yaml and db/schema.sql (schema:delete), bin/shop-agent (binary:grew>20%). Then each changed file by kind: the lockfile's version changes, the API's breaking changes, the dropped and added columns, the picture's changed region, the video's replaced shot and changed sound, the program file's growth.">
 </picture>
 
 A new push updates the same comment instead of adding another. The job's summary page shows the summary too.
