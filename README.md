@@ -26,6 +26,51 @@ The action fetches the history it needs to find where the pull request branched,
 
 It runs on Linux (x64 and arm64, built for Ubuntu 24.04) and on macOS with Apple silicon. There is no Windows download yet; there, set `binary-url` to a `diffacto.exe` of your own.
 
+## What it looks like
+
+These pictures are real output from a sample pull request. It updates two npm packages and adds a third, removes an API endpoint, drops a database column, recolors part of a picture, blacks out a second of a video, and makes a program file bigger. The job ran with one rule set:
+
+```yaml
+      - uses: chauduyphanvu/diffacto-action@v1
+        with:
+          fail-on: schema:delete,binary:grew>20%
+```
+
+### The comment
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/comment-dark.png">
+  <img src="docs/comment-light.png" width="820" alt="The pull request comment. Blocked by policy: api/openapi.yaml and db/schema.sql (schema:delete), bin/shop-agent (binary:grew>20%). Then each changed file by kind: the lockfile's version changes, the API's breaking changes, the dropped and added columns, the picture's changed region, the video's replaced shot, the program file's growth.">
+</picture>
+
+A new push updates the same comment instead of adding another. The job's summary page shows the summary too.
+
+### When a rule blocks the pull request
+
+The comment is posted first. Then the job's last step fails, and its log says which files the rules blocked:
+
+```
+diffacto: api/openapi.yaml is blocked by --fail-on schema:delete
+diffacto: bin/shop-agent is blocked by --fail-on binary:grew>20%
+diffacto: db/schema.sql is blocked by --fail-on schema:delete
+```
+
+### The full report
+
+The comment links to the report, which is uploaded with the job. It shows every file in full. Here is the API file:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/report-top-dark.png">
+  <img src="docs/report-top-light.png" width="1100" alt="The report's first page: a list of the eight changed files, then api/openapi.yaml with its summary, its four changes in reading order, and the two versions side by side with the removed endpoint and the changed parameter type marked.">
+</picture>
+
+And a picture, before and after:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/report-image-dark.png">
+  <img src="docs/report-image-light.png" width="1100" alt="assets/banner.png in the report: before and after thumbnails, where the left part of a blue bar turned orange, and the changed region's position, size and color difference.">
+</picture>
+
 ## Public and private repositories
 
 Public repositories need no license. A private repository needs a Diffacto Team license: store the license key as a secret and give it to the job as `DIFFACTO_LICENSE`.
